@@ -26,12 +26,12 @@ use openssl::x509::*;
 use futures_util::stream::StreamExt;
 use rustls::Certificate;
 use rustls::ClientConfig;
-use tokio::net::TcpStream as TokioTcpStream;
 use tokio::runtime::Runtime;
 
 use crate::rustls::tls_connect;
+use crate::tcp::TokioTcpConnector;
 use crate::xfer::SerialMessage;
-use crate::{iocompat::AsyncIoTokioAsStd, DnsStreamHandle};
+use crate::DnsStreamHandle;
 
 // this fails on linux for some reason. It appears that a buffer somewhere is dirty
 //  and subsequent reads of a message buffer reads the wrong length. It works for 2 iterations
@@ -215,10 +215,11 @@ fn tls_client_stream_test(server_addr: IpAddr, mtls: bool) {
     //     config_mtls(&root_pkey, &root_name, &root_cert, &mut builder);
     // }
 
-    let (stream, mut sender) = tls_connect::<AsyncIoTokioAsStd<TokioTcpStream>>(
+    let (stream, mut sender) = tls_connect::<TokioTcpConnector>(
         server_addr,
         dns_name.to_string(),
         Arc::new(config),
+        TokioTcpConnector,
     );
 
     // TODO: there is a race failure here... a race with the server thread most likely...
