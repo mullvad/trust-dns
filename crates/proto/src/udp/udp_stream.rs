@@ -303,6 +303,7 @@ impl<S: UdpSocketBinder> Future for NextRandomUdpSocket<S> {
 #[derive(Clone, Copy, Default)]
 pub struct TokioUdpBinder;
 
+#[cfg(feature = "tokio-runtime")]
 #[async_trait]
 impl UdpSocketBinder for TokioUdpBinder {
     type Time = crate::TokioTime;

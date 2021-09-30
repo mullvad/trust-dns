@@ -11,7 +11,6 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-#[cfg(feature = "tokio-runtime")]
 use futures_util::{future::Future, stream::Stream, StreamExt, TryFutureExt};
 use log::warn;
 
