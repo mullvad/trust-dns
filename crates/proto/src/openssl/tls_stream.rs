@@ -248,15 +248,13 @@ impl<S: TcpConnector> TlsStreamBuilder<S> {
         // This set of futures collapses the next tcp socket into a stream which can be used for
         //  sending and receiving tcp packets.
         let stream = Box::pin(
-            connect_tls(tls_config, dns_name, name_server, self.connector).map_ok(
-                move |s| {
-                    TcpStream::from_stream_with_receiver(
-                        AsyncIoTokioAsStd(s),
-                        name_server,
-                        outbound_messages,
-                    )
-                },
-            ),
+            connect_tls(tls_config, dns_name, name_server, self.connector).map_ok(move |s| {
+                TcpStream::from_stream_with_receiver(
+                    AsyncIoTokioAsStd(s),
+                    name_server,
+                    outbound_messages,
+                )
+            }),
         );
 
         (stream, message_sender)
