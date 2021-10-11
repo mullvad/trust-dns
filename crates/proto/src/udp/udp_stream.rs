@@ -27,7 +27,7 @@ where
     Self: Send + Sync + Sized + Clone + Unpin,
 {
     /// Time implementation used for this type
-    type Time: Time;
+    type Time: Time + Unpin + Send;
     /// Type of socket that would be bound by the trait implementation. E.g. for tokio, it would be
     /// `tokio::net::UdpSocket`.
     type Socket: UdpSocket + Send + 'static;

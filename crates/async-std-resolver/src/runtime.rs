@@ -59,9 +59,7 @@ impl Executor for AsyncStdRuntime {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct AsyncStdRuntimeHandle;
-impl Spawn for AsyncStdRuntimeHandle {
+impl Spawn for AsyncStdRuntime {
     fn spawn_bg<F>(&mut self, future: F)
     where
         F: Future<Output = Result<(), ProtoError>> + Send + 'static,
@@ -71,7 +69,7 @@ impl Spawn for AsyncStdRuntimeHandle {
 }
 
 #[async_trait::async_trait]
-impl UdpSocketBinder for AsyncStdRuntimeHandle {
+impl UdpSocketBinder for AsyncStdRuntime {
     type Socket = AsyncStdUdpSocket;
     type Time = AsyncStdTime;
     async fn bind(&self, addr: std::net::SocketAddr) -> std::io::Result<Self::Socket> {
@@ -82,7 +80,7 @@ impl UdpSocketBinder for AsyncStdRuntimeHandle {
 }
 
 #[async_trait::async_trait]
-impl TcpConnector for AsyncStdRuntimeHandle {
+impl TcpConnector for AsyncStdRuntime {
     type Socket = AsyncStdTcpStream;
     async fn connect(self, addr: std::net::SocketAddr) -> std::io::Result<Self::Socket> {
         let stream = async_std::net::TcpStream::connect(addr).await?;
@@ -91,19 +89,7 @@ impl TcpConnector for AsyncStdRuntimeHandle {
     }
 }
 
-impl RuntimeProvider for AsyncStdRuntime {
-    type Handle = AsyncStdRuntimeHandle;
-    type Tcp = AsyncStdTcpStream;
-    type Timer = AsyncStdTime;
-    type Udp = AsyncStdUdpSocket;
-}
-
-impl AsyncStdRuntime {
-    #[cfg(test)]
-    pub(crate) fn handle(&self) -> AsyncStdRuntimeHandle {
-        AsyncStdRuntimeHandle
-    }
-}
+impl RuntimeProvider for AsyncStdRuntime {}
 
 /// AsyncStd default connection
 pub type AsyncStdConnection = GenericConnection;

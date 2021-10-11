@@ -31,12 +31,11 @@ use proto::{
     self,
     error::ProtoError,
     op::NoopMessageFinalizer,
-    tcp::DnsTcpStream,
     tcp::TcpClientConnect,
     tcp::TcpClientStream,
     tcp::TcpConnector,
     udp::UdpClientConnect,
-    udp::{UdpClientStream, UdpSocket, UdpSocketBinder},
+    udp::{UdpClientStream, UdpSocketBinder},
     xfer::{
         DnsExchange, DnsExchangeConnect, DnsExchangeSend, DnsHandle, DnsMultiplexer,
         DnsMultiplexerConnect, DnsRequest, DnsResponse,
@@ -69,24 +68,9 @@ pub trait ConnectionProvider: 'static + Clone + Send + Sync + Unpin {
 }
 
 /// RuntimeProvider defines which async runtime that handles IO and timers.
-pub trait RuntimeProvider: Clone + 'static {
-    /// Handle to the executor;
-    type Handle: Clone
-        + Send
-        + Spawn
-        + Sync
-        + Unpin
-        + UdpSocketBinder<Time = Self::Timer, Socket = Self::Udp>
-        + TcpConnector<Socket = Self::Tcp>;
-
-    /// Timer
-    type Timer: Time + Send + Unpin;
-
-    /// UdpSocket
-    type Udp: UdpSocket + Send;
-
-    /// TcpStream
-    type Tcp: DnsTcpStream;
+pub trait RuntimeProvider:
+    Clone + 'static + Send + Spawn + Sync + Unpin + UdpSocketBinder + TcpConnector
+{
 }
 
 /// A type defines the Handle which can spawn future.
@@ -98,11 +82,11 @@ pub trait Spawn {
 
 /// Standard connection implements the default mechanism for creating new Connections
 #[derive(Clone)]
-pub struct GenericConnectionProvider<R: RuntimeProvider>(R::Handle);
+pub struct GenericConnectionProvider<R: RuntimeProvider>(R);
 
 impl<R: RuntimeProvider> GenericConnectionProvider<R> {
-    pub fn new(handle: R::Handle) -> Self {
-        Self(handle)
+    pub fn new(runtime: R) -> Self {
+        Self(runtime)
     }
 }
 
@@ -112,7 +96,7 @@ where
 {
     type Conn = GenericConnection;
     type FutureConn = ConnectionFuture<R>;
-    type Time = R::Timer;
+    type Time = <R as UdpSocketBinder>::Time;
 
     /// Constructs an initial constructor for the ConnectionHandle to be used to establish a
     ///   future connection.
@@ -123,7 +107,7 @@ where
     ) -> Self::FutureConn {
         let dns_connect = match config.protocol {
             Protocol::Udp => {
-                let stream = UdpClientStream::<R::Handle>::with_timeout(
+                let stream = UdpClientStream::<R>::with_timeout(
                     config.socket_addr,
                     options.timeout,
                     self.0.clone(),
@@ -135,8 +119,11 @@ where
                 let socket_addr = config.socket_addr;
                 let timeout = options.timeout;
 
-                let (stream, handle) =
-                    TcpClientStream::<R::Tcp>::with_timeout(socket_addr, timeout, self.0.clone());
+                let (stream, handle) = TcpClientStream::<<R as TcpConnector>::Socket>::with_timeout(
+                    socket_addr,
+                    timeout,
+                    self.0.clone(),
+                );
                 // TODO: need config for Signer...
                 let dns_conn = DnsMultiplexer::with_timeout(
                     stream,
@@ -229,16 +216,16 @@ type TlsClientStream<S> =
 /// The variants of all supported connections for the Resolver
 #[allow(clippy::large_enum_variant, clippy::type_complexity)]
 pub(crate) enum ConnectionConnect<R: RuntimeProvider> {
-    Udp(DnsExchangeConnect<UdpClientConnect<R::Handle>, UdpClientStream<R::Handle>, R::Timer>),
+    Udp(DnsExchangeConnect<UdpClientConnect<R>, UdpClientStream<R>, <R as UdpSocketBinder>::Time>),
     Tcp(
         DnsExchangeConnect<
             DnsMultiplexerConnect<
-                TcpClientConnect<<R as RuntimeProvider>::Tcp>,
-                TcpClientStream<<R as RuntimeProvider>::Tcp>,
+                TcpClientConnect<<R as TcpConnector>::Socket>,
+                TcpClientStream<<R as TcpConnector>::Socket>,
                 NoopMessageFinalizer,
             >,
-            DnsMultiplexer<TcpClientStream<<R as RuntimeProvider>::Tcp>, NoopMessageFinalizer>,
-            R::Timer,
+            DnsMultiplexer<TcpClientStream<<R as TcpConnector>::Socket>, NoopMessageFinalizer>,
+            <R as UdpSocketBinder>::Time,
         >,
     ),
     #[cfg(feature = "dns-over-tls")]
@@ -249,22 +236,22 @@ pub(crate) enum ConnectionConnect<R: RuntimeProvider> {
                     Box<
                         dyn Future<
                                 Output = Result<
-                                    TlsClientStream<<R as RuntimeProvider>::Tcp>,
+                                    TlsClientStream<<R as TcpConnector>::Socket>,
                                     ProtoError,
                                 >,
                             > + Send
                             + 'static,
                     >,
                 >,
-                TlsClientStream<<R as RuntimeProvider>::Tcp>,
+                TlsClientStream<<R as TcpConnector>::Socket>,
                 NoopMessageFinalizer,
             >,
-            DnsMultiplexer<TlsClientStream<<R as RuntimeProvider>::Tcp>, NoopMessageFinalizer>,
+            DnsMultiplexer<TlsClientStream<<R as TcpConnector>::Socket>, NoopMessageFinalizer>,
             TokioTime,
         >,
     ),
     #[cfg(feature = "dns-over-https")]
-    Https(DnsExchangeConnect<HttpsClientConnect<R::Handle>, HttpsClientStream, TokioTime>),
+    Https(DnsExchangeConnect<HttpsClientConnect<R>, HttpsClientStream, TokioTime>),
     #[cfg(feature = "mdns")]
     Mdns(
         DnsExchangeConnect<
@@ -279,7 +266,7 @@ pub(crate) enum ConnectionConnect<R: RuntimeProvider> {
 #[must_use = "futures do nothing unless polled"]
 pub struct ConnectionFuture<R: RuntimeProvider> {
     connect: ConnectionConnect<R>,
-    spawner: R::Handle,
+    spawner: R,
 }
 
 impl<R: RuntimeProvider> Future for ConnectionFuture<R> {
@@ -354,7 +341,7 @@ pub mod tokio_runtime {
 
     #[derive(Clone, Copy)]
     pub struct TokioHandle;
-    impl Spawn for TokioHandle {
+    impl Spawn for TokioRuntime {
         fn spawn_bg<F>(&mut self, future: F)
         where
             F: Future<Output = Result<(), ProtoError>> + Send + 'static,
@@ -364,7 +351,7 @@ pub mod tokio_runtime {
     }
 
     #[async_trait::async_trait]
-    impl UdpSocketBinder for TokioHandle {
+    impl UdpSocketBinder for TokioRuntime {
         type Time = TokioTime;
         type Socket = TokioUdpSocket;
 
@@ -374,7 +361,7 @@ pub mod tokio_runtime {
     }
 
     #[async_trait::async_trait]
-    impl TcpConnector for TokioHandle {
+    impl TcpConnector for TokioRuntime {
         type Socket = AsyncIoTokioAsStd<TokioTcpStream>;
 
         async fn connect(self, addr: std::net::SocketAddr) -> std::io::Result<Self::Socket> {
@@ -384,12 +371,8 @@ pub mod tokio_runtime {
 
     #[derive(Clone, Copy)]
     pub struct TokioRuntime;
-    impl RuntimeProvider for TokioRuntime {
-        type Handle = TokioHandle;
-        type Tcp = AsyncIoTokioAsStd<TokioTcpStream>;
-        type Timer = TokioTime;
-        type Udp = TokioUdpSocket;
-    }
+    impl RuntimeProvider for TokioRuntime {}
+
     pub type TokioConnection = GenericConnection;
     pub type TokioConnectionProvider = GenericConnectionProvider<TokioRuntime>;
 }

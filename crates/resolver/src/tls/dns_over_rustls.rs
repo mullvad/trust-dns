@@ -17,6 +17,7 @@ use rustls::{ClientConfig, ProtocolVersion, RootCertStore};
 
 use proto::error::ProtoError;
 use proto::rustls::{tls_client_connect, TlsClientStream};
+use proto::tcp::TcpConnector;
 use proto::BufDnsStreamHandle;
 
 use crate::config::TlsClientConfig;
@@ -45,9 +46,14 @@ pub(crate) fn new_tls_stream<R: RuntimeProvider>(
     socket_addr: SocketAddr,
     dns_name: String,
     client_config: Option<TlsClientConfig>,
-    connector: R::Handle,
+    connector: R,
 ) -> (
-    Pin<Box<dyn Future<Output = Result<TlsClientStream<R::Tcp>, ProtoError>> + Send>>,
+    Pin<
+        Box<
+            dyn Future<Output = Result<TlsClientStream<<R as TcpConnector>::Socket>, ProtoError>>
+                + Send,
+        >,
+    >,
     BufDnsStreamHandle,
 ) {
     let client_config = client_config.map_or_else(
