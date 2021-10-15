@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use rustls::{Certificate, ClientConfig};
 use trust_dns_proto::https::{HttpsClientConnect, HttpsClientStream, HttpsClientStreamBuilder};
-use trust_dns_proto::tcp::TcpConnector;
+use trust_dns_proto::RuntimeProvider;
 
 use crate::client::{ClientConnection, Signer};
 
@@ -24,11 +24,11 @@ pub struct HttpsClientConnection<T> {
     name_server: SocketAddr,
     dns_name: String,
     client_config: ClientConfig,
-    connector: T,
+    runtime: T,
 }
 
-impl<T: TcpConnector + Default> HttpsClientConnection<T> {
-    /// Creates a new client connection with a default TCP connector.
+impl<T: RuntimeProvider + Default> HttpsClientConnection<T> {
+    /// Creates a new client connection with a default runtime provider.
     ///
     /// *Note* this has side affects of binding the socket to 0.0.0.0 and starting the listening
     ///        event_loop. Expect this to change in the future.
@@ -42,23 +42,23 @@ impl<T: TcpConnector + Default> HttpsClientConnection<T> {
     }
 }
 
-impl<T: TcpConnector> HttpsClientConnection<T> {
-    /// Creates a new client connection with a TCP connector.
+impl<T: RuntimeProvider> HttpsClientConnection<T> {
+    /// Creates a new client connection with runtime provider.
     ///
     /// *Note* this has side affects of binding the socket to 0.0.0.0 and starting the listening
     ///        event_loop. Expect this to change in the future.
     ///
     /// # Arguments
     ///
-    /// * `connector` - TCP connector to be used for establishing an HTTPS connection.
-    pub fn with_connector(connector: T) -> HttpsClientConnectionBuilder<T> {
-        HttpsClientConnectionBuilder::new(connector)
+    /// * `runtime` - runtime provider to be used for establishing an HTTPS connection.
+    pub fn with_runtime(runtime: T) -> HttpsClientConnectionBuilder<T> {
+        HttpsClientConnectionBuilder::new(runtime)
     }
 }
 
 impl<T> ClientConnection for HttpsClientConnection<T>
 where
-    T: TcpConnector,
+    T: RuntimeProvider,
 {
     type Sender = HttpsClientStream;
     type SenderFuture = HttpsClientConnect<T>;
@@ -70,7 +70,7 @@ where
     ) -> Self::SenderFuture {
         // TODO: maybe signer needs to be applied in https...
         let https_builder = HttpsClientStreamBuilder::with_client_config(
-            self.connector.clone(),
+            self.runtime.clone(),
             Arc::new(self.client_config.clone()),
         );
         https_builder.build(self.name_server, self.dns_name.clone())
@@ -78,25 +78,25 @@ where
 }
 
 /// A helper to construct an HTTPS connection
-pub struct HttpsClientConnectionBuilder<T: TcpConnector> {
+pub struct HttpsClientConnectionBuilder<T: RuntimeProvider> {
     client_config: ClientConfig,
-    connector: T,
+    runtime: T,
 }
 
-impl<T: TcpConnector> HttpsClientConnectionBuilder<T> {
+impl<T: RuntimeProvider> HttpsClientConnectionBuilder<T> {
     /// Return a new builder for DNS-over-HTTPS
-    pub fn new(connector: T) -> HttpsClientConnectionBuilder<T> {
+    pub fn new(runtime: T) -> HttpsClientConnectionBuilder<T> {
         HttpsClientConnectionBuilder {
             client_config: ClientConfig::new(),
-            connector,
+            runtime,
         }
     }
 
     /// Constructs a new TlsStreamBuilder with the associated ClientConfig
-    pub fn with_client_config(client_config: ClientConfig, connector: T) -> Self {
+    pub fn with_client_config(client_config: ClientConfig, runtime: T) -> Self {
         HttpsClientConnectionBuilder {
             client_config,
-            connector,
+            runtime,
         }
     }
 
@@ -121,16 +121,16 @@ impl<T: TcpConnector> HttpsClientConnectionBuilder<T> {
             name_server,
             dns_name,
             client_config: self.client_config,
-            connector: self.connector,
+            runtime: self.runtime,
         }
     }
 }
 
-impl<T: TcpConnector + Default> Default for HttpsClientConnectionBuilder<T> {
+impl<T: RuntimeProvider + Default> Default for HttpsClientConnectionBuilder<T> {
     fn default() -> Self {
         Self {
             client_config: ClientConfig::new(),
-            connector: Default::default(),
+            runtime: Default::default(),
         }
     }
 }

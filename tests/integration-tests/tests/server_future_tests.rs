@@ -16,9 +16,8 @@ use trust_dns_client::rr::*;
 use trust_dns_client::tcp::TcpClientConnection;
 use trust_dns_client::udp::UdpClientConnection;
 use trust_dns_proto::error::ProtoError;
-use trust_dns_proto::tcp::TokioTcpConnector;
-use trust_dns_proto::udp::TokioUdpBinder;
 use trust_dns_proto::xfer::DnsRequestSender;
+use trust_dns_proto::TokioRuntime;
 
 use trust_dns_server::authority::{Authority, Catalog};
 use trust_dns_server::ServerFuture;
@@ -100,7 +99,7 @@ fn test_server_unknown_type() {
         .spawn(move || server_thread_udp(runtime, udp_socket, server_continue2))
         .unwrap();
 
-    let conn = UdpClientConnection::new(ipaddr, TokioUdpBinder).unwrap();
+    let conn = UdpClientConnection::new(ipaddr, TokioRuntime).unwrap();
     let client = SyncClient::new(conn);
     let client_result = client
         .query(
@@ -147,7 +146,7 @@ fn test_server_form_error_on_multiple_queries() {
         .spawn(move || server_thread_udp(runtime, udp_socket, server_continue2))
         .unwrap();
 
-    let conn = UdpClientConnection::new(ipaddr, TokioUdpBinder).unwrap();
+    let conn = UdpClientConnection::new(ipaddr, TokioRuntime).unwrap();
     let client = SyncClient::new(conn);
 
     // build the message
@@ -252,12 +251,12 @@ fn test_server_www_tls() {
     server_thread.join().unwrap();
 }
 
-fn lazy_udp_client(ipaddr: SocketAddr) -> UdpClientConnection<TokioUdpBinder> {
-    UdpClientConnection::new(ipaddr, TokioUdpBinder).unwrap()
+fn lazy_udp_client(ipaddr: SocketAddr) -> UdpClientConnection<TokioRuntime> {
+    UdpClientConnection::new(ipaddr, TokioRuntime).unwrap()
 }
 
-fn lazy_tcp_client(ipaddr: SocketAddr) -> TcpClientConnection<TokioTcpConnector> {
-    TcpClientConnection::new(ipaddr, TokioTcpConnector).unwrap()
+fn lazy_tcp_client(ipaddr: SocketAddr) -> TcpClientConnection<TokioRuntime> {
+    TcpClientConnection::new(ipaddr, TokioRuntime).unwrap()
 }
 
 #[cfg(feature = "dns-over-rustls")]
@@ -265,7 +264,7 @@ fn lazy_tls_client(
     ipaddr: SocketAddr,
     dns_name: String,
     cert_chain: Vec<rustls::Certificate>,
-) -> TlsClientConnection<TokioTcpConnector> {
+) -> TlsClientConnection<TokioRuntime> {
     use rustls::ClientConfig;
 
     let mut config = ClientConfig::new();
@@ -274,7 +273,7 @@ fn lazy_tls_client(
         config.root_store.add(&cert).expect("bad certificate");
     }
 
-    TlsClientConnection::new(ipaddr, dns_name, Arc::new(config), TokioTcpConnector)
+    TlsClientConnection::new(ipaddr, dns_name, Arc::new(config), TokioRuntime)
 }
 
 fn client_thread_www<C: ClientConnection>(conn: C)

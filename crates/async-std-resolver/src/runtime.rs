@@ -8,12 +8,10 @@
 use std::future::Future;
 
 use trust_dns_resolver::proto::error::ProtoError;
-use trust_dns_resolver::proto::tcp::TcpConnector;
-use trust_dns_resolver::proto::udp::UdpSocketBinder;
 use trust_dns_resolver::proto::Executor;
 
 use trust_dns_resolver::name_server::{
-    GenericConnection, GenericConnectionProvider, RuntimeProvider, Spawn,
+    GenericConnection, GenericConnectionProvider, RuntimeProvider,
 };
 
 use crate::net::{AsyncStdTcpStream, AsyncStdUdpSocket};
@@ -59,7 +57,24 @@ impl Executor for AsyncStdRuntime {
     }
 }
 
-impl Spawn for AsyncStdRuntime {
+#[async_trait::async_trait]
+impl RuntimeProvider for AsyncStdRuntime {
+    type UdpSocket = AsyncStdUdpSocket;
+    type Time = AsyncStdTime;
+    type TcpConnection = AsyncStdTcpStream;
+
+    async fn bind_udp(&self, addr: std::net::SocketAddr) -> std::io::Result<Self::UdpSocket> {
+        async_std::net::UdpSocket::bind(addr)
+            .await
+            .map(AsyncStdUdpSocket)
+    }
+
+    async fn connect_tcp(self, addr: std::net::SocketAddr) -> std::io::Result<Self::TcpConnection> {
+        let stream = async_std::net::TcpStream::connect(addr).await?;
+        stream.set_nodelay(true)?;
+        Ok(AsyncStdTcpStream(stream))
+    }
+
     fn spawn_bg<F>(&mut self, future: F)
     where
         F: Future<Output = Result<(), ProtoError>> + Send + 'static,
@@ -67,29 +82,6 @@ impl Spawn for AsyncStdRuntime {
         let _join = async_std::task::spawn(future);
     }
 }
-
-#[async_trait::async_trait]
-impl UdpSocketBinder for AsyncStdRuntime {
-    type Socket = AsyncStdUdpSocket;
-    type Time = AsyncStdTime;
-    async fn bind(&self, addr: std::net::SocketAddr) -> std::io::Result<Self::Socket> {
-        async_std::net::UdpSocket::bind(addr)
-            .await
-            .map(AsyncStdUdpSocket)
-    }
-}
-
-#[async_trait::async_trait]
-impl TcpConnector for AsyncStdRuntime {
-    type Socket = AsyncStdTcpStream;
-    async fn connect(self, addr: std::net::SocketAddr) -> std::io::Result<Self::Socket> {
-        let stream = async_std::net::TcpStream::connect(addr).await?;
-        stream.set_nodelay(true)?;
-        Ok(AsyncStdTcpStream(stream))
-    }
-}
-
-impl RuntimeProvider for AsyncStdRuntime {}
 
 /// AsyncStd default connection
 pub type AsyncStdConnection = GenericConnection;
