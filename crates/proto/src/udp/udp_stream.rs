@@ -112,9 +112,8 @@ impl<S: UdpSocket + Send + 'static> UdpStream<S> {
     ///
     /// a tuple of a Future Stream which will handle sending and receiving messages, and a
     ///  handle which can be used to send messages into the stream.
-    // TODO: change the name of this function to "with_runtime"
     #[allow(clippy::type_complexity)]
-    pub fn with_binder<R>(
+    pub fn with_runtime<R>(
         remote_addr: SocketAddr,
         runtime: R,
     ) -> (
