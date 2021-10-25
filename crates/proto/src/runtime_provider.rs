@@ -18,7 +18,10 @@ pub trait RuntimeProvider: Clone + 'static + Send + Sync + Unpin {
     async fn bind_udp(&self, addr: SocketAddr) -> io::Result<Self::UdpSocket>;
 
     /// Create a socket and connect to the specified socket address.
-    async fn connect_tcp(self, addr: SocketAddr) -> io::Result<Self::TcpConnection>;
+    fn connect_tcp(
+        &self,
+        addr: SocketAddr,
+    ) -> Box<dyn Future<Output = io::Result<Self::TcpConnection>> + Unpin + Send>;
 
     /// Spawn a future on the given runtime.
     fn spawn_bg<F>(&self, future: F)
@@ -48,13 +51,15 @@ mod tokio_runtime {
             Self::UdpSocket::bind(addr).await
         }
 
-        async fn connect_tcp(
-            self,
+        fn connect_tcp(
+            &self,
             addr: std::net::SocketAddr,
-        ) -> std::io::Result<Self::TcpConnection> {
-            tokio::net::TcpStream::connect(addr)
-                .await
-                .map(AsyncIoTokioAsStd)
+        ) -> Box<dyn Future<Output = std::io::Result<Self::TcpConnection>> + Unpin + Send> {
+            Box::new(Box::pin(async move {
+                tokio::net::TcpStream::connect(addr)
+                    .await
+                    .map(AsyncIoTokioAsStd)
+            }))
         }
 
         fn spawn_bg<F>(&self, future: F)
