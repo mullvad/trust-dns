@@ -75,7 +75,7 @@ impl RuntimeProvider for AsyncStdRuntime {
         Ok(AsyncStdTcpStream(stream))
     }
 
-    fn spawn_bg<F>(&mut self, future: F)
+    fn spawn_bg<F>(&self, future: F)
     where
         F: Future<Output = Result<(), ProtoError>> + Send + 'static,
     {

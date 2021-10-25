@@ -21,7 +21,7 @@ pub trait RuntimeProvider: Clone + 'static + Send + Sync + Unpin {
     async fn connect_tcp(self, addr: SocketAddr) -> io::Result<Self::TcpConnection>;
 
     /// Spawn a future on the given runtime.
-    fn spawn_bg<F>(&mut self, future: F)
+    fn spawn_bg<F>(&self, future: F)
     where
         F: Future<Output = Result<(), ProtoError>> + Send + 'static;
 }
@@ -57,7 +57,7 @@ mod tokio_runtime {
                 .map(AsyncIoTokioAsStd)
         }
 
-        fn spawn_bg<F>(&mut self, future: F)
+        fn spawn_bg<F>(&self, future: F)
         where
             F: Future<Output = Result<(), ProtoError>> + Send + 'static,
         {
