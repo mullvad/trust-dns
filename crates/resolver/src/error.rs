@@ -138,10 +138,6 @@ impl ResolveError {
         }
     }
 
-    pub(crate) fn is_no_connections(&self) -> bool {
-        matches!(self.kind, ResolveErrorKind::NoConnections)
-    }
-
     /// A conversion to determine if the response is an error
     pub fn from_response(response: DnsResponse, trust_nx: bool) -> Result<DnsResponse, Self> {
         match response.response_code() {
